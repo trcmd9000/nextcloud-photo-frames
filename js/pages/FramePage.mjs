@@ -27,21 +27,16 @@ injectGlobal`
 `;
 
 async function responseToBlobUrl(imageResponse) {
-  // Read the image to a DataURL using the FileReader API
-  // This is to prevent the browser from caching the image URL (which is the same for all images)
+  // Create a blob URL for the image. Blob URLs are unique per image,
+  // so the browser cannot show a previously cached image URL
   const blob = await imageResponse.blob();
 
-  const reader = new FileReader();
-  dispatch("pf:image-loadstart", { reader });
+  dispatch("pf:image-loadstart", { blob });
 
-  const result = await new Promise((res, rej) => {
-    reader.onloadend = () => res(reader.result);
-    reader.onerror = () => rej();
-    reader.readAsDataURL(blob);
-  });
+  const blobUrl = URL.createObjectURL(blob);
 
-  dispatch("pf:image-loadend", { reader });
-  return result;
+  dispatch("pf:image-loadend", { blob });
+  return blobUrl;
 }
 
 let nextTimeoutAt = Date.now();
@@ -78,6 +73,17 @@ export default function FramePage(props) {
   useEffect(() => {
     let loopTimeout;
 
+    // Fetch the image in screen size (including device pixel ratio)
+    const sizedImageUrl = new URL(imageUrl, location.origin);
+    sizedImageUrl.searchParams.set(
+      "w",
+      Math.round(screen.width * (window.devicePixelRatio || 1)),
+    );
+    sizedImageUrl.searchParams.set(
+      "h",
+      Math.round(screen.height * (window.devicePixelRatio || 1)),
+    );
+
     const updateImage = async () => {
       if (imageRef.current) {
         // Fetch the newest image's expiry, continue if the expiry is
@@ -90,7 +96,7 @@ export default function FramePage(props) {
         if (imageRef.current.expiresAt >= nextExpiresAt) return;
       }
 
-      const imageResponse = await timedFetch(10000, imageUrl);
+      const imageResponse = await timedFetch(10000, sizedImageUrl);
 
       // If image returns a 404, it means the albums has no images
       if (imageResponse.status === 404) throw new AlbumEmptyError();
@@ -111,6 +117,7 @@ export default function FramePage(props) {
         ),
         refreshInterval: rotationUnitRefreshInterval[rotationUnit],
       };
+      const previousImage = imageRef.current;
       imageRef.current = nextImage;
 
       setImages((images) => [images.at(0), nextImage].filter(Boolean));
@@ -121,6 +128,7 @@ export default function FramePage(props) {
         await new Promise((resolve) => {
           setTimeout(() => {
             setImages([nextImage]);
+            if (previousImage) URL.revokeObjectURL(previousImage.url);
             dispatch("pf:image-visible", { image: nextImage });
             resolve();
           }, 2000);
@@ -156,7 +164,11 @@ export default function FramePage(props) {
         setError(true);
       });
 
-    return () => clearTimeout(loopTimeout);
+    return () => {
+      clearTimeout(loopTimeout);
+      // The current blob URL can no longer be shown, release it
+      if (imageRef.current) URL.revokeObjectURL(imageRef.current.url);
+    };
   }, []);
 
   if (albumIsEmpty) {

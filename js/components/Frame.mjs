@@ -121,7 +121,15 @@ export default function Frame(props) {
     })();
 
     window.addEventListener("resize", renderImage);
-    return () => window.removeEventListener("resize", renderImage);
+    return () => {
+      window.removeEventListener("resize", renderImage);
+      // Release the canvas buffer and the image reference
+      if (canvasRef.current) {
+        canvasRef.current.width = 0;
+        canvasRef.current.height = 0;
+      }
+      loadedImageRef.current = null;
+    };
   }, [renderOnCanvas]);
 
   return html`

@@ -18,6 +18,7 @@ use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\Attribute\OpenAPI;
 use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\ContentSecurityPolicy;
+use OCP\AppFramework\Http\DataDisplayResponse;
 use OCP\AppFramework\Http\FileDisplayResponse;
 use OCP\AppFramework\Http\NotFoundResponse;
 use OCP\AppFramework\Http\RedirectResponse;
@@ -25,6 +26,7 @@ use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\Common\Exception\NotFoundException;
 use OCP\Files\IRootFolder;
+use OCP\Image;
 use OCP\IConfig;
 use OCP\IDBConnection;
 use OCP\IRequest;
@@ -342,6 +344,36 @@ class PageController extends Controller
       if ($method === 'HEAD') {
         return new Response(200, $headers);
       } else {
+        // Optional size parameters (w/h) to deliver a screen-sized image
+        $w = $this->request->getParam('w');
+        $h = $this->request->getParam('h');
+
+        if ($w !== null && $h !== null) {
+          // Clamp to a sane range
+          $w = min(2560, max(64, (int) $w));
+          $h = min(2560, max(64, (int) $h));
+
+          $preview = $this->preview->getPreview($node, $w, height: $h);
+
+          $image = new Image();
+          $image->loadFromData($preview->getContent());
+
+          if ($image->valid()) {
+            $iw = $image->width();
+            $ih = $image->height();
+            // Cover fit: fill the requested size without upscaling
+            $scale = min(1, max($w / $iw, $h / $ih));
+            if ($scale < 1) {
+              $image->preciseResize((int) round($iw * $scale), (int) round($ih * $scale));
+            }
+            $headers['Content-Type'] = $image->mimeType();
+            return new DataDisplayResponse($image->data(), 200, $headers);
+          }
+
+          // Preview could not be processed, deliver it unchanged
+          return new FileDisplayResponse($preview, 200, $headers);
+        }
+
         $preview = $this->preview->getPreview($node, 2560, height: 2560);
         return new FileDisplayResponse($preview, 200, $headers);
       }

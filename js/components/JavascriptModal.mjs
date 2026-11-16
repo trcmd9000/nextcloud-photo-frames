@@ -187,13 +187,13 @@ export default function JavascriptModal(props) {
               <tr>
                 <td><code class="hljs-string">pf:image-loadstart</code></td>
                 <td>Image starts loading.</td>
-                <td>reader: file reader</td>
+                <td>blob: image blob</td>
               </tr>
               <tr>
                 <td><code class="hljs-string">pf:image-loadend</code></td>
                 <td>Image was loaded and is ready to be shown</td>
                 <td>
-                  reader: file reader<br />
+                  blob: image blob<br />
                   image
                 </td>
               </tr>
