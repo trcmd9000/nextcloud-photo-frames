@@ -23,6 +23,8 @@ injectGlobal`
   }
   body {
     margin: 0;
+    // Diashow on the frame: wait dark, no white screen while loading or recycling
+    background-color: #000;
   }
 `;
 
